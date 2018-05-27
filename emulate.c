@@ -21,6 +21,8 @@ struct instruction {
 
 enum InstructionClass{DataProcess, Multiply, DataTransfer, Branch};
 
+enum ShiftType{LSL, LSR, ASR, ROR};
+
 
 struct state machineState;
 
@@ -91,43 +93,208 @@ static inline uint32_t rotr32(uint32_t n, unsigned int c)
     c &= mask;
     return (n>>c) | (n<<( (-c)&mask ));
 }
-
-void arithmeticLogicUnit(struct state* machineState,struct instruction* nextInstruction) {
-    //perform arithmetic
-    //if arithhmetic operation update CSPR C to carry out of ALU
+size_t highestOneBitPosition(uint32_t a) {
+    size_t bits=0;
+    while (a!=0) {
+        ++bits;
+        a>>=1;
+    };
+    return bits;
 }
 
-int32_t barrelShift(struct state* machineState,struct instruction* nextInstruction) {
+bool additionWillProduceCarry(uint32_t a, uint32_t b) {
+    size_t a_bits=highestOneBitPosition(a), b_bits=highestOneBitPosition(b);
+    return (a_bits<32 && b_bits<32);
+}
+
+bool subtractionWillUseBorrow(uint32_t a, uint32_t b) {
+    size_t a_bits=highestOneBitPosition(a), b_bits=highestOneBitPosition(b);
+    return (a_bits<32 && b_bits<32);
+}
+
+void arithmeticLogicUnit(struct state* machineState,struct instruction* nextInstruction,uint32_t operand1,uint32_t operand2,bool updateCSPR,uint32_t* carryOut) {
+    //perform arithmetic
+    //if arithhmetic operation update CSPR C to carry out of ALU
+            uint32_t allBytes = nextInstruction->allbytes;
+            uint8_t destRegisterAddress = allBytes >> 12 & 0xF;
+            uint32_t * destRegister = &(machineState->registers[destRegisterAddress]);
+            uint32_t result;
+
+            if(allBytes & andMask == andMask) {
+
+                result = operand1 & operand2;
+                *destRegister = result;
+                if(updateCSPR) {
+                    if(result == 0x0) {
+                        machineState->registers[CSPR] |= (0x40000000);
+                    }
+                    machineState->registers[CSPR] |= (result & 0x80000000);
+
+                }
+            } else if(allBytes & eorMask == eorMask) {
+                result = operand1 ^ operand2;
+                *destRegister = result;
+                if(updateCSPR) {
+                    if(result == 0x0) {
+                        machineState->registers[CSPR] |= (0x40000000);
+                    }
+                    machineState->registers[CSPR] |= (result & 0x80000000);
+
+                }
+            } else if(allBytes & subMask == subMask) {
+                result = operand1 - operand2;
+                *destRegister = result;
+                if(result > (operand2)) {
+                    //underflow
+                    *carryOut = 0;
+                } else {
+                    *carryOut = 1;
+                }
+            } else if(allBytes & rsbMask == rsbMask) {
+                result = operand2 - operand1;
+                *destRegister = result;
+                *destRegister = operand2 - operand1;
+                if(result > (operand1)) {
+                    //underflow
+                    *carryOut = 0;
+                } else {
+                    *carryOut = 1;
+                }
+            } else if(allBytes & addMask == addMask) {
+                result = operand1 + operand2;
+                *destRegister = operand2 + operand1;
+                if(result < operand1) {
+                    //overflow
+                    *carryOut = 1;
+                } else {
+                    *carryOut = 0;
+                }
+            } else if(allBytes & tstMask == tstMask) {
+                result = operand1 & operand2;
+                if(updateCSPR) {
+                    if(result == 0x0) {
+                        machineState->registers[CSPR] |= (0x40000000);
+                    }
+                    machineState->registers[CSPR] |= (result & 0x80000000);
+                }
+
+            } else if(allBytes & teqMask == teqMask) {
+                result = operand1 ^ operand2;
+                if(updateCSPR) {
+                if(result == 0x0) {
+                    machineState->registers[CSPR] |= (0x40000000);
+                }
+                machineState->registers[CSPR] |= (result & 0x80000000);
+
+            }
+
+            } else if(allBytes & cmpMask == cmpMask) {
+                result = operand1 - operand2;
+                if(result == 0x0 && updateCSPR) {
+                    machineState->registers[CSPR] |= (0x40000000);
+                }
+                if(result > (operand2)) {
+                    //underflow
+                    *carryOut = 0;
+                } else {
+                    *carryOut = 1;
+                }
+            } else if(allBytes & orrMask == orrMask) {
+                result = operand1 | operand2;
+                *destRegister = result;
+                if(updateCSPR) {
+                    if(result == 0x0) {
+                        machineState->registers[CSPR] |= (0x40000000);
+                    }
+                    machineState->registers[CSPR] |= (result & 0x80000000);
+
+                }
+            } else {
+                //mov
+                *destRegister = operand2;
+            }
+}
+
+void barrelShift(struct state* machineState,struct instruction* nextInstruction,bool updateCSPR) {
     //perform shift
     //if logic operation update CSPR C to barrel carry out
     //continue to ALU
-    //do this if I set
+//get operand1 from register.
+    uint32_t operand1 = machineState->registers[(nextInstruction->allbytes >> 16 & 0xF)];
     uint32_t operand2 = nextInstruction->allbytes & 0xFFF;
-    uint8_t numberOfBitsToRotate = operand2 >> 8;
-    uint32_t immediate = operand2 & 0xFF;
-    uint32_t shiftedOperand = rotr32(immediate,numberOfBitsToRotate);
+    uint32_t carry;
 
-    //fetch register and shift if I not set
+    bool IisSet = (nextInstruction->allbytes & 0x2000000 == 0x2000000);
+    if(IisSet) {
+        //do this if I set
+        uint8_t numberOfBitsToRotate = (operand2 >> 8) * 2;
+        uint32_t immediate = operand2 & 0xFF;
+        uint32_t shiftedOperand = rotr32(immediate, numberOfBitsToRotate);
+
+        if (updateCSPR) {
+            carry = (immediate >> (numberOfBitsToRotate - 1)) & 1;
+        }
+
+    } else {
+        //fetch register and shift if I not set
+        uint32_t rmRegister = operand2 & 0xF;
+        uint8_t shift = (operand2 >> 4);
+        uint8_t shiftType = ((shift >> 1) & 0x3);
+        uint8_t shiftOption =  (shift & 0x1) & 1;
 
 
-    arithmeticLogicUnit(machineState,nextInstruction);
+        if(shiftOption == 1) {
+            uint32_t integer = (shift >> 3);
+            operand2 = performShift(shiftType,machineState->registers[rmRegister],integer,&carry);
+        } else {
+           uint32_t rsRegister = (shift >> 4);
+           uint8_t bottomByteOfrsRegister = machineState->registers[rsRegister];
+           operand2 = performShift(shiftType,machineState->registers[rmRegister],bottomByteOfrsRegister,&carry);
+        }
+    }
 
+    arithmeticLogicUnit(machineState,nextInstruction,operand1,operand2,updateCSPR,&carry);
+
+    if (updateCSPR) {
+        machineState->registers[CSPR] |= (carry << 29);
+    }
+
+}
+
+uint32_t performShift(uint8_t shiftType, uint32_t contentToShiftOn, uint32_t amountToShiftBy, uint32_t * carry) {
+
+// >> operator is logaical shift if int is unisgned and is arithmetic if int is signed.
+    uint32_t operand2;
+    if(shiftType & lsl == lsl) {
+        *carry = ((contentToShiftOn << (amountToShiftBy-1)) & 0x80000000) >> 31;
+        operand2 = contentToShiftOn << amountToShiftBy;
+        return operand2;
+    } else if(shiftType & lsr == lsr) {
+        *carry = (contentToShiftOn >> (amountToShiftBy-1)) & 1;
+        operand2 = contentToShiftOn >> amountToShiftBy;
+        return operand2;
+    } else if(shiftType & asr == asr) {
+        *carry = (contentToShiftOn >> (amountToShiftBy-1)) & 1;
+        //cast to signed to force arithmetic shift.
+        operand2 = (signed)contentToShiftOn << amountToShiftBy;
+        return operand2;
+    } else {
+        *carry = (contentToShiftOn >> (amountToShiftBy-1)) & 1;
+        operand2 = rotr32(contentToShiftOn,amountToShiftBy);
+        return operand2;
+    }
 }
 
 void dataProcessExecute(struct state* machineState,struct instruction* nextInstruction) {
     uint32_t allBytes = nextInstruction->allbytes;
     uint32_t rnRegister = machineState->registers[(allBytes>> 16) & 0xF];
 
-    barrelShift(machineState,nextInstruction);
-    uint32_t rdRegister = machineState->registers[(allBytes>> 12) & 0xF];
+    bool updateCSPR = (allBytes >> 20 & 0x1) == 0X1;
 
-    //update CSPR_N to 31st bit of dest register
-    machineState->registers[CSPR] |= (rdRegister & 0x80000000);
+    barrelShift(machineState,nextInstruction,updateCSPR);
 
-    //set CSPR_Z if dest register is all zero
-    if(rdRegister == 0x0) {
-        machineState->registers[CSPR] |= (0x40000000);
-    }
+
+
 }
 
 void multiplyExecute(struct state* machineState,struct instruction* nextInstruction) {

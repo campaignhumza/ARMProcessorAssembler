@@ -35,5 +35,10 @@ const uint32_t cmpMask = 0x2800000;
 const uint32_t orrMask = 0x3000000;
 const uint32_t movMask = 0x3400000;
 
+const uint8_t lsl = 0x0;
+const uint8_t lsr = 0x1;
+const uint8_t asr = 0x2;
+const uint8_t ror = 0x3;
+
 //struct instruction fetchNext(struct state* machineState);
 #endif //EMULATOR_EMULATE_H
