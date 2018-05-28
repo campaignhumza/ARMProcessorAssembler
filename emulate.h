@@ -6,7 +6,7 @@
 #define EMULATOR_EMULATE_H
 
 
-#define CSPR 16
+#define CSPR 14
 
 
 const uint32_t HALT = 0x00000000;
@@ -28,12 +28,12 @@ const uint32_t andMask = 0x0;
 const uint32_t eorMask = 0x200000;
 const uint32_t subMask = 0x400000;
 const uint32_t rsbMask = 0xC00000;
-const uint32_t addMask = 0x1000000;
+const uint32_t addMask = 0x800000;
 const uint32_t tstMask = 0x2000000;
 const uint32_t teqMask = 0x2400000;
 const uint32_t cmpMask = 0x2800000;
 const uint32_t orrMask = 0x3000000;
-const uint32_t movMask = 0x3400000;
+const uint32_t movMask = 0x1A00000;
 
 const uint8_t lsl = 0x0;
 const uint8_t lsr = 0x1;
