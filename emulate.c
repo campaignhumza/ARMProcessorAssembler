@@ -26,20 +26,20 @@ enum ShiftType{LSL, LSR, ASR, ROR};
 
 struct state machineState;
 
-bool isCSPR_N(struct state* machineState) {
-    return (machineState->registers[CSPR] >> 31 & 1);
+bool isCSPR_N() {
+    return (machineState.registers[CSPR] >> 31 & 1);
 }
 
-bool isCSPR_Z(struct state* machineState) {
-    return (machineState->registers[CSPR]>> 30 & 1);
+bool isCSPR_Z() {
+    return (machineState.registers[CSPR]>> 30 & 1);
 }
 
-bool isCSPR_C(struct state* machineState) {
-    return (machineState->registers[CSPR]>> 29 & 1);
+bool isCSPR_C() {
+    return (machineState.registers[CSPR]>> 29 & 1);
 }
 
-bool isCSPR_V(struct state* machineState) {
-    return (machineState->registers[CSPR]>> 28 & 1);
+bool isCSPR_V() {
+    return (machineState.registers[CSPR]>> 28 & 1);
 }
 
 enum InstructionClass getInstructionClass(struct instruction* nextInstruction) {
@@ -59,23 +59,23 @@ enum InstructionClass getInstructionClass(struct instruction* nextInstruction) {
     }
 }
 
-bool isCond(struct state* machineState,struct instruction* nextInstruction) {
+bool isCond(struct instruction* nextInstruction) {
     uint32_t allBytes = nextInstruction->allbytes;
     uint8_t cond = ((allBytes >> 28) & 0xF);
 
     switch(cond) {
         case eq  :
-            return isCSPR_Z(machineState);
+            return isCSPR_Z();
         case ne  :
-            return !isCSPR_Z(machineState);
+            return !isCSPR_Z();
         case ge  :
-            return isCSPR_N(machineState) == isCSPR_V(machineState);
+            return isCSPR_N() == isCSPR_V();
         case lt  :
-            return isCSPR_N(machineState) != isCSPR_V(machineState);
+            return isCSPR_N() != isCSPR_V();
         case gt  :
-            return !isCSPR_Z(machineState) && (isCSPR_N(machineState) == isCSPR_V(machineState));
+            return !isCSPR_Z() && (isCSPR_N() == isCSPR_V());
         case le  :
-            return (isCSPR_Z(machineState) || (isCSPR_N(machineState) != isCSPR_V(machineState)));
+            return (isCSPR_Z() || (isCSPR_N() != isCSPR_V()));
         case al  :
             return true;
         default:
@@ -92,31 +92,12 @@ static inline uint32_t rotr32(uint32_t n, unsigned int c)
     return (n>>c) | (n<<( (-c)&mask ));
 }
 
-size_t highestOneBitPosition(uint32_t a) {
-    size_t bits=0;
-    while (a!=0) {
-        ++bits;
-        a>>=1;
-    };
-    return bits;
-}
-
-bool additionWillProduceCarry(uint32_t a, uint32_t b) {
-    size_t a_bits=highestOneBitPosition(a), b_bits=highestOneBitPosition(b);
-    return (a_bits<32 && b_bits<32);
-}
-
-bool subtractionWillUseBorrow(uint32_t a, uint32_t b) {
-    size_t a_bits=highestOneBitPosition(a), b_bits=highestOneBitPosition(b);
-    return (a_bits<32 && b_bits<32);
-}
-
-void arithmeticLogicUnit(struct state* machineState,struct instruction* nextInstruction,uint32_t operand1,uint32_t operand2,bool updateCSPR,uint32_t* carryOut) {
+void arithmeticLogicUnit(struct instruction* nextInstruction,uint32_t operand1,uint32_t operand2,bool updateCSPR,uint32_t* carryOut) {
     //perform arithmetic
     //if arithhmetic operation update CSPR C to carry out of ALU
             uint32_t allBytes = nextInstruction->allbytes;
             uint8_t destRegisterAddress = allBytes >> 12 & 0xF;
-            uint32_t * destRegister = &(machineState->registers[destRegisterAddress]);
+            uint32_t * destRegister = &(machineState.registers[destRegisterAddress]);
             uint32_t result;
 
             if((allBytes & movMask) == movMask) {
@@ -127,9 +108,9 @@ void arithmeticLogicUnit(struct state* machineState,struct instruction* nextInst
                 *destRegister = result;
                 if(updateCSPR) {
                     if(result == 0x0) {
-                        machineState->registers[CSPR] |= (0x40000000);
+                        machineState.registers[CSPR] |= (0x40000000);
                     }
-                    machineState->registers[CSPR] |= (result & 0x80000000);
+                    machineState.registers[CSPR] |= (result & 0x80000000);
 
                 }
             } else if((allBytes & subMask) == subMask) {
@@ -164,25 +145,25 @@ void arithmeticLogicUnit(struct state* machineState,struct instruction* nextInst
                 result = operand1 & operand2;
                 if(updateCSPR) {
                     if(result == 0x0) {
-                        machineState->registers[CSPR] |= (0x40000000);
+                        machineState.registers[CSPR] |= (0x40000000);
                     }
-                    machineState->registers[CSPR] |= (result & 0x80000000);
+                    machineState.registers[CSPR] |= (result & 0x80000000);
                 }
 
             } else if((allBytes & teqMask) == teqMask) {
                 result = operand1 ^ operand2;
                 if(updateCSPR) {
                 if(result == 0x0) {
-                    machineState->registers[CSPR] |= (0x40000000);
+                    machineState.registers[CSPR] |= (0x40000000);
                 }
-                machineState->registers[CSPR] |= (result & 0x80000000);
+                machineState.registers[CSPR] |= (result & 0x80000000);
 
             }
 
             } else if((allBytes & cmpMask) == cmpMask) {
                 result = operand1 - operand2;
                 if(result == 0x0 && updateCSPR) {
-                    machineState->registers[CSPR] |= (0x40000000);
+                    machineState.registers[CSPR] |= (0x40000000);
                 }
                 if(result > (operand2)) {
                     //underflow
@@ -195,9 +176,9 @@ void arithmeticLogicUnit(struct state* machineState,struct instruction* nextInst
                 *destRegister = result;
                 if(updateCSPR) {
                     if(result == 0x0) {
-                        machineState->registers[CSPR] |= (0x40000000);
+                        machineState.registers[CSPR] |= (0x40000000);
                     }
-                    machineState->registers[CSPR] |= (result & 0x80000000);
+                    machineState.registers[CSPR] |= (result & 0x80000000);
 
                 }
             } else {
@@ -206,9 +187,9 @@ void arithmeticLogicUnit(struct state* machineState,struct instruction* nextInst
                 *destRegister = result;
                 if(updateCSPR) {
                     if(result == 0x0) {
-                        machineState->registers[CSPR] |= (0x40000000);
+                        machineState.registers[CSPR] |= (0x40000000);
                     }
-                    machineState->registers[CSPR] |= (result & 0x80000000);
+                    machineState.registers[CSPR] |= (result & 0x80000000);
 
                 }
             }
@@ -238,13 +219,13 @@ uint32_t performShift(uint8_t shiftType, uint32_t contentToShiftOn, uint32_t amo
     }
 }
 
-void barrelShift(struct state* machineState,struct instruction* nextInstruction,bool updateCSPR) {
+void barrelShift(struct instruction* nextInstruction,bool updateCSPR) {
     //perform shift
     //if logic operation update CSPR C to barrel carry out
     //continue to ALU
 //get operand1 from register.
     uint32_t allBytes = nextInstruction->allbytes;
-    uint32_t operand1 = machineState->registers[(allBytes>> 16) & 0xF];
+    uint32_t operand1 = machineState.registers[(allBytes>> 16) & 0xF];
     uint32_t operand2 = allBytes & 0xFFF;
     uint32_t carry;
 
@@ -269,99 +250,97 @@ void barrelShift(struct state* machineState,struct instruction* nextInstruction,
 
         if(shiftOption == 1) {
             uint32_t integer = (shift >> 3);
-            operand2 = performShift(shiftType,machineState->registers[rmRegister],integer,&carry);
+            operand2 = performShift(shiftType,machineState.registers[rmRegister],integer,&carry);
         } else {
            uint32_t rsRegister = (shift >> 4);
-           uint8_t bottomByteOfrsRegister = (machineState->registers[rsRegister]);
-           operand2 = performShift(shiftType,machineState->registers[rmRegister],bottomByteOfrsRegister,&carry);
+           uint8_t bottomByteOfrsRegister = (machineState.registers[rsRegister]);
+           operand2 = performShift(shiftType,machineState.registers[rmRegister],bottomByteOfrsRegister,&carry);
         }
     }
 
-    arithmeticLogicUnit(machineState,nextInstruction,operand1,operand2,updateCSPR,&carry);
+    arithmeticLogicUnit(nextInstruction,operand1,operand2,updateCSPR,&carry);
 
     if (updateCSPR) {
-        machineState->registers[CSPR] |= (carry << 29);
+        machineState.registers[CSPR] |= (carry << 29);
     }
 }
 
-
-
-void dataProcessExecute(struct state* machineState,struct instruction* nextInstruction) {
+void dataProcessExecute(struct instruction* nextInstruction) {
     uint32_t allBytes = nextInstruction->allbytes;
 
     bool updateCSPR = (allBytes & (1<<20));
 
-    barrelShift(machineState,nextInstruction,updateCSPR);
+    barrelShift(nextInstruction,updateCSPR);
 }
 
-void multiplyExecute(struct state* machineState,struct instruction* nextInstruction) {
-
-}
-
-void dataTransferExecute(struct state* machineState,struct instruction* nextInstruction) {
+void multiplyExecute(struct instruction* nextInstruction) {
 
 }
 
-void branchExecute(struct state* machineState,struct instruction* nextInstruction) {
+void dataTransferExecute(struct instruction* nextInstruction) {
 
 }
 
-void execute(struct state* machineState, struct instruction* nextInstruction) {
+void branchExecute(struct instruction* nextInstruction) {
 
-    if(isCond(machineState,nextInstruction)) {
+}
+
+void execute(struct instruction* nextInstruction) {
+
+    if(isCond(nextInstruction)) {
         switch (getInstructionClass(nextInstruction)) {
             case DataProcess :
-                dataProcessExecute(machineState,nextInstruction);
+                dataProcessExecute(nextInstruction);
                 break;
             case Multiply :
-                multiplyExecute(machineState,nextInstruction);
+                multiplyExecute(nextInstruction);
                 break;
             case DataTransfer :
-                dataTransferExecute(machineState,nextInstruction);
+                dataTransferExecute(nextInstruction);
                 break;
             case Branch :
-                branchExecute(machineState,nextInstruction);
+                branchExecute(nextInstruction);
                 break;
         }
     }
 }
 
-struct instruction fetch(struct state* machineState) {
-    uint8_t byte0 = machineState->memory[machineState->registers[13]];
-    uint8_t byte1 = machineState->memory[machineState->registers[13]+1];
-    uint8_t byte2 = machineState->memory[machineState->registers[13]+2];
-    uint8_t byte3 = machineState->memory[machineState->registers[13]+3];
+struct instruction fetch() {
+    uint8_t byte0 = machineState.memory[machineState.registers[13]];
+    uint8_t byte1 = machineState.memory[machineState.registers[13]+1];
+    uint8_t byte2 = machineState.memory[machineState.registers[13]+2];
+    uint8_t byte3 = machineState.memory[machineState.registers[13]+3];
 
     //pc + 4
-    machineState->registers[13] = machineState->registers[13]+4;
+    machineState.registers[13] = machineState.registers[13]+4;
 
     struct instruction next = {byte0,byte1,byte2,byte3,((byte3 << 24) | (byte2 << 16) | (byte1 << 8) | byte0)};
 
     return next;
 }
 
-void printState(struct state* machineState) {
+void printState() {
     printf("Registers:\n");
     for(int i = 0; i <15; i++) {
         if(i < 13) {
-                printf("$%-3d:%10d (0x%08x)\n",i,machineState->registers[i],machineState->registers[i]);
+                printf("$%-3d:%10d (0x%08x)\n",i,machineState.registers[i],machineState.registers[i]);
 
 
         } else {
             if(i == 13) {
-                printf("PC  :%10d (0x%08x)\n",machineState->registers[i],machineState->registers[i]);
+                printf("PC  :%10d (0x%08x)\n",machineState.registers[i],machineState.registers[i]);
             } else {
-                printf("CSPR:%10d (0x%08x)\n",machineState->registers[i],machineState->registers[i]);
+                printf("CSPR:%10d (0x%08x)\n",machineState.registers[i],machineState.registers[i]);
             }
         }
     }
     printf("Non-zero memory:\n");
 
     for(int i = 0; i < 65537; i++) {
-        uint8_t byte0 = machineState->memory[i];
-        uint8_t byte1 = machineState->memory[i+1];
-        uint8_t byte2 = machineState->memory[i+2];
-        uint8_t byte3 = machineState->memory[i+3];
+        uint8_t byte0 = machineState.memory[i];
+        uint8_t byte1 = machineState.memory[i+1];
+        uint8_t byte2 = machineState.memory[i+2];
+        uint8_t byte3 = machineState.memory[i+3];
         uint32_t allBytes = ((byte0 << 24) | (byte1 << 16) | (byte2 << 8) | byte3);
         if(allBytes != HALT) {
             printf("0x%08x: 0x%08x\n",i,allBytes);
@@ -373,15 +352,11 @@ void printState(struct state* machineState) {
     }
 }
 
-int main(int argc, char *argv[]) {
-
-    //execute each instruction;
-//printf("Success");
-   struct state machineState;
+void binaryLoad(char* binPath) {
     FILE *fileptr;
     long filelen;
 
-    fileptr = fopen(argv[1], "rb");  // Open the file in binary mode
+    fileptr = fopen(binPath, "rb");  // Open the file in binary mode
     fseek(fileptr, 0, SEEK_END);          // Jump to the end of the file
     filelen = ftell(fileptr);             // Get the current byte offset in the file
     rewind(fileptr);
@@ -391,32 +366,30 @@ int main(int argc, char *argv[]) {
         machineState.memory[i] = 0;
     }
 
-   /* for(int i =0; i < 65536; i++) {
-        printf("0x%08x\n",machineState.memory[i] = 0);
-    }*/
-
-
-
     for(int i = 0; i <16; i++) {
         machineState.registers[i] = 0;
     }
 
     fread(&machineState.memory, filelen+1, 1, fileptr); // Read in the entire file
     fclose(fileptr);
+}
 
+int main(int argc, char *argv[]) {
 
-    struct instruction nextInstruction = fetch(&machineState);
+    //binary Load
+    binaryLoad(argv[1]);
+
+    //fetch execute cycle
+    struct instruction nextInstruction = fetch();
     while(nextInstruction.allbytes != HALT) {
 
-        execute(&machineState,&nextInstruction);
-        //printf("%x\n",nextInstruction.allbytes);
-        nextInstruction = fetch(&machineState);
+        execute(&nextInstruction);
+        nextInstruction = fetch();
     }
     machineState.registers[13] = machineState.registers[13]+4;
 
-
-
-    printState(&machineState);
+    //print state
+    printState();
 
     return 0;
 }
