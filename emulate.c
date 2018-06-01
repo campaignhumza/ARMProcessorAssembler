@@ -1,94 +1,16 @@
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <limits.h>
 #include "emulate.h"
-
-struct state {
-    uint8_t memory[65536];
-    uint32_t registers[15];
-};
-
-
-enum InstructionClass{DataProcess, Multiply, DataTransfer, Branch};
-
-enum ShiftType{LSL, LSR, ASR, ROR};
+#include "dataProcess.h"
 
 struct state machineState;
 
-bool isCSPR_N() {
-    return (machineState.registers[CSPR] >> 31 & 1);
-}
-
-bool isCSPR_Z() {
-    return (machineState.registers[CSPR]>> 30 & 1);
-}
-
-bool isCSPR_C() {
-    return (machineState.registers[CSPR]>> 29 & 1);
-}
-
-bool isCSPR_V() {
-    return (machineState.registers[CSPR]>> 28 & 1);
-}
-
-enum InstructionClass getInstructionClass(uint32_t * nextInstruction) {
-
-    uint32_t allBytes = *nextInstruction;
-    if((allBytes & dataProcMask) == dataProcMask) {
-        return DataProcess;
-    }
-    if((allBytes & multMask) == multMask) {
-        return Multiply;
-    }
-    if((allBytes & dataTransMask) == dataTransMask) {
-        return DataTransfer;
-    }else
-        {
-        return Branch;
-    }
-}
-
-bool isCond(uint32_t nextInstruction) {
-    uint8_t cond = ((nextInstruction >> 28) & 0xF);
-
-    switch(cond) {
-        case eq  :
-            return isCSPR_Z();
-        case ne  :
-            return !isCSPR_Z();
-        case ge  :
-            return isCSPR_N() == isCSPR_V();
-        case lt  :
-            return isCSPR_N() != isCSPR_V();
-        case gt  :
-            return !isCSPR_Z() && (isCSPR_N() == isCSPR_V());
-        case le  :
-            return (isCSPR_Z() || (isCSPR_N() != isCSPR_V()));
-        case al  :
-            return true;
-        default:
-            return false;
-    }
-}
-
-static inline uint32_t rotr32(uint32_t n, unsigned int c)
-{
-    const unsigned int mask = (CHAR_BIT*sizeof(n) - 1);
-
-    // assert ( (c<=mask) &&"rotate by type width or more");
-    c &= mask;
-    return (n>>c) | (n<<( (-c)&mask ));
-}
-
-void arithmeticLogicUnit(uint32_t nextInstruction,uint32_t operand1,uint32_t operand2,bool updateCSPR,uint32_t* carryOut) {
+void arithmeticLogicUnit(uint32_t nextInstruction,uint32_t operand1,uint32_t operand2) {
     //perform arithmetic
     //if arithhmetic operation update CSPR C to carry out of ALU
             uint32_t allBytes = nextInstruction;
             uint8_t destRegisterAddress = allBytes >> 12 & 0xF;
             uint32_t * destRegister = &(machineState.registers[destRegisterAddress]);
             uint32_t result;
+    bool updateCSPR = (nextInstruction & (1<<20));
 
             if((allBytes & movMask) == movMask) {
                 *destRegister = operand2;
@@ -106,30 +28,36 @@ void arithmeticLogicUnit(uint32_t nextInstruction,uint32_t operand1,uint32_t ope
             } else if((allBytes & subMask) == subMask) {
                 result = operand1 - operand2;
                 *destRegister = result;
-                if(result > (operand2)) {
-                    //underflow
-                    *carryOut = 0;
-                } else {
-                    *carryOut = 1;
+                if (updateCSPR) {
+                    if (result > (operand2)) {
+                        //underflow
+                        machineState.registers[CSPR] |= (0 << 30);
+                    } else {
+                        machineState.registers[CSPR] |= (1 << 30);
+                    }
                 }
             } else if((allBytes & rsbMask) == rsbMask) {
                 result = operand2 - operand1;
                 *destRegister = result;
                 *destRegister = operand2 - operand1;
-                if(result > (operand1)) {
-                    //underflow
-                    *carryOut = 0;
-                } else {
-                    *carryOut = 1;
+                if (updateCSPR) {
+                    if (result > (operand1)) {
+                        //underflow
+                        machineState.registers[CSPR] |= (0 << 30);
+                    } else {
+                        machineState.registers[CSPR] |= (1 << 30);
+                    }
                 }
             } else if((allBytes & addMask) == addMask) {
                 result = operand1 + operand2;
                 *destRegister = operand2 + operand1;
-                if(result < operand1) {
-                    //overflow
-                    *carryOut = 1;
-                } else {
-                    *carryOut = 0;
+                if (updateCSPR) {
+                    if (result < operand1) {
+                        //overflow
+                        machineState.registers[CSPR] |= (1 << 30);
+                    } else {
+                        machineState.registers[CSPR] |= (0 << 30);
+                    }
                 }
             } else if((allBytes & tstMask) == tstMask) {
                 result = operand1 & operand2;
@@ -155,11 +83,13 @@ void arithmeticLogicUnit(uint32_t nextInstruction,uint32_t operand1,uint32_t ope
                 if(result == 0x0 && updateCSPR) {
                     machineState.registers[CSPR] |= (0x40000000);
                 }
-                if(result > (operand2)) {
-                    //underflow
-                    *carryOut = 0;
-                } else {
-                    *carryOut = 1;
+                if (updateCSPR) {
+                    if (result > (operand2)) {
+                        //underflow
+                        machineState.registers[CSPR] |= (0 << 30);
+                    } else {
+                        machineState.registers[CSPR] |= (1 << 30);
+                    }
                 }
             } else if((allBytes & orrMask) == orrMask) {
                 result = operand1 | operand2;
@@ -172,7 +102,7 @@ void arithmeticLogicUnit(uint32_t nextInstruction,uint32_t operand1,uint32_t ope
 
                 }
             } else {
-                //mov
+                //and
                 result = operand1 & operand2;
                 *destRegister = result;
                 if(updateCSPR) {
@@ -183,81 +113,6 @@ void arithmeticLogicUnit(uint32_t nextInstruction,uint32_t operand1,uint32_t ope
 
                 }
             }
-}
-
-uint32_t performShift(uint8_t shiftType, uint32_t contentToShiftOn, uint32_t amountToShiftBy, uint32_t * carry) {
-
-// >> operator is logaical shift if int is unisgned and is arithmetic if int is signed.
-    uint32_t operand2;
-    if((shiftType & lsl) == lsl) {
-        *carry = ((contentToShiftOn << (amountToShiftBy-1)) & 0x80000000) >> 31;
-        operand2 = contentToShiftOn << amountToShiftBy;
-        return operand2;
-    } else if((shiftType & lsr) == lsr) {
-        *carry = (contentToShiftOn >> (amountToShiftBy-1)) & 1;
-        operand2 = contentToShiftOn >> amountToShiftBy;
-        return operand2;
-    } else if((shiftType & asr) == asr) {
-        *carry = (contentToShiftOn >> (amountToShiftBy-1)) & 1;
-        //cast to signed to force arithmetic shift.
-        operand2 = (signed)contentToShiftOn << amountToShiftBy;
-        return operand2;
-    } else {
-        *carry = (contentToShiftOn >> (amountToShiftBy-1)) & 1;
-        operand2 = rotr32(contentToShiftOn,amountToShiftBy);
-        return operand2;
-    }
-}
-
-void barrelShift(uint32_t nextInstruction) {
-
-
-    bool updateCSPR = (nextInstruction & (1<<20));
-
-    uint32_t allBytes = nextInstruction;
-    uint32_t operand1 = machineState.registers[(allBytes>> 16) & 0xF];
-    uint32_t operand2 = allBytes & 0xFFF;
-    uint32_t carry;
-
-    bool IisSet = ((allBytes & 0x2000000) == 0x2000000);
-    if(IisSet) {
-        //do this if I set
-        uint8_t numberOfBitsToRotate = (operand2 >> 8) * 2;
-        uint32_t immediate = operand2 & 0xFF;
-        uint32_t shiftedOperand = rotr32(immediate, numberOfBitsToRotate);
-
-        if (updateCSPR) {
-            carry = (immediate >> (numberOfBitsToRotate - 1)) & 1;
-        }
-
-    } else {
-        //fetch register and shift if I not set
-        uint32_t rmRegister = operand2 & 0xF;
-        uint8_t shift = (operand2 >> 4);
-        uint8_t shiftType = ((shift >> 1) & 0x3);
-        uint8_t shiftOption =  (shift & 0x1) & 1;
-
-
-        if(shiftOption == 1) {
-            uint32_t integer = (shift >> 3);
-            operand2 = performShift(shiftType,machineState.registers[rmRegister],integer,&carry);
-        } else {
-           uint32_t rsRegister = (shift >> 4);
-           uint8_t bottomByteOfrsRegister = (machineState.registers[rsRegister]);
-           operand2 = performShift(shiftType,machineState.registers[rmRegister],bottomByteOfrsRegister,&carry);
-        }
-    }
-
-    arithmeticLogicUnit(nextInstruction,operand1,operand2,updateCSPR,&carry);
-
-    if (updateCSPR) {
-        machineState.registers[CSPR] |= (carry << 29);
-    }
-}
-
-void dataProcessExecute(uint32_t nextInstruction) {
-
-    barrelShift(nextInstruction);
 }
 
 void multiplyExecute(uint32_t nextInstruction) {
@@ -272,12 +127,21 @@ void branchExecute(uint32_t nextInstruction) {
 
 }
 
+void dataProcessExecute(struct state machineState, uint32_t nextInstruction) {
+
+    uint32_t operand1 = machineState.registers[(nextInstruction>> 16) & 0xF];
+    uint32_t operand2 = barrelShift(machineState,nextInstruction);
+
+    arithmeticLogicUnit(nextInstruction,operand1,operand2);
+
+}
+
 void execute(uint32_t nextInstruction, enum InstructionClass instructionClass) {
 
-    if(isCond(nextInstruction)) {
+    if(isCond(nextInstruction, machineState.registers[CSPR])) {
         switch (instructionClass) {
             case DataProcess :
-                dataProcessExecute(nextInstruction);
+                dataProcessExecute(machineState,nextInstruction);
                 break;
             case Multiply :
                 multiplyExecute(nextInstruction);
@@ -316,7 +180,7 @@ uint32_t fetch() {
     uint8_t byte3 = machineState.memory[machineState.registers[PC]+3];
 
     //pc + 4
-    machineState.registers[13] = machineState.registers[13]+4;
+    machineState.registers[PC] = machineState.registers[PC]+4;
 
     //concat bytes into 32 bit instruction
     uint32_t nextInstruction = ((byte3 << 24) | (byte2 << 16) | (byte1 << 8) | byte0);
@@ -392,7 +256,7 @@ int main(int argc, char *argv[]) {
         nextInstruction = fetch();
     }
 
-    machineState.registers[13] = machineState.registers[13]+4;
+    machineState.registers[PC] = machineState.registers[PC]+4;
 
     //print state
     printState();
