@@ -7,7 +7,7 @@
 
 
 #define CSPR 14
-
+#define PC 13
 
 const uint32_t HALT = 0x00000000;
 

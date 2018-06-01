@@ -10,15 +10,6 @@ struct state {
     uint32_t registers[15];
 };
 
-struct instruction {
-    uint8_t byte0;
-    uint8_t byte1;
-    uint8_t byte2;
-    uint8_t cond;
-
- uint32_t allbytes;
- uint32_t swapped;
-};
 
 enum InstructionClass{DataProcess, Multiply, DataTransfer, Branch};
 
@@ -42,9 +33,9 @@ bool isCSPR_V() {
     return (machineState.registers[CSPR]>> 28 & 1);
 }
 
-enum InstructionClass getInstructionClass(struct instruction* nextInstruction) {
+enum InstructionClass getInstructionClass(uint32_t * nextInstruction) {
 
-    uint32_t allBytes = nextInstruction->allbytes;
+    uint32_t allBytes = *nextInstruction;
     if((allBytes & dataProcMask) == dataProcMask) {
         return DataProcess;
     }
@@ -59,9 +50,8 @@ enum InstructionClass getInstructionClass(struct instruction* nextInstruction) {
     }
 }
 
-bool isCond(struct instruction* nextInstruction) {
-    uint32_t allBytes = nextInstruction->allbytes;
-    uint8_t cond = ((allBytes >> 28) & 0xF);
+bool isCond(uint32_t nextInstruction) {
+    uint8_t cond = ((nextInstruction >> 28) & 0xF);
 
     switch(cond) {
         case eq  :
@@ -92,10 +82,10 @@ static inline uint32_t rotr32(uint32_t n, unsigned int c)
     return (n>>c) | (n<<( (-c)&mask ));
 }
 
-void arithmeticLogicUnit(struct instruction* nextInstruction,uint32_t operand1,uint32_t operand2,bool updateCSPR,uint32_t* carryOut) {
+void arithmeticLogicUnit(uint32_t nextInstruction,uint32_t operand1,uint32_t operand2,bool updateCSPR,uint32_t* carryOut) {
     //perform arithmetic
     //if arithhmetic operation update CSPR C to carry out of ALU
-            uint32_t allBytes = nextInstruction->allbytes;
+            uint32_t allBytes = nextInstruction;
             uint8_t destRegisterAddress = allBytes >> 12 & 0xF;
             uint32_t * destRegister = &(machineState.registers[destRegisterAddress]);
             uint32_t result;
@@ -219,17 +209,17 @@ uint32_t performShift(uint8_t shiftType, uint32_t contentToShiftOn, uint32_t amo
     }
 }
 
-void barrelShift(struct instruction* nextInstruction,bool updateCSPR) {
-    //perform shift
-    //if logic operation update CSPR C to barrel carry out
-    //continue to ALU
-//get operand1 from register.
-    uint32_t allBytes = nextInstruction->allbytes;
+void barrelShift(uint32_t nextInstruction) {
+
+
+    bool updateCSPR = (nextInstruction & (1<<20));
+
+    uint32_t allBytes = nextInstruction;
     uint32_t operand1 = machineState.registers[(allBytes>> 16) & 0xF];
     uint32_t operand2 = allBytes & 0xFFF;
     uint32_t carry;
 
-    bool IisSet = ((nextInstruction->allbytes & 0x2000000) == 0x2000000);
+    bool IisSet = ((allBytes & 0x2000000) == 0x2000000);
     if(IisSet) {
         //do this if I set
         uint8_t numberOfBitsToRotate = (operand2 >> 8) * 2;
@@ -265,30 +255,27 @@ void barrelShift(struct instruction* nextInstruction,bool updateCSPR) {
     }
 }
 
-void dataProcessExecute(struct instruction* nextInstruction) {
-    uint32_t allBytes = nextInstruction->allbytes;
+void dataProcessExecute(uint32_t nextInstruction) {
 
-    bool updateCSPR = (allBytes & (1<<20));
-
-    barrelShift(nextInstruction,updateCSPR);
+    barrelShift(nextInstruction);
 }
 
-void multiplyExecute(struct instruction* nextInstruction) {
+void multiplyExecute(uint32_t nextInstruction) {
 
 }
 
-void dataTransferExecute(struct instruction* nextInstruction) {
+void dataTransferExecute(uint32_t nextInstruction) {
 
 }
 
-void branchExecute(struct instruction* nextInstruction) {
+void branchExecute(uint32_t nextInstruction) {
 
 }
 
-void execute(struct instruction* nextInstruction) {
+void execute(uint32_t nextInstruction, enum InstructionClass instructionClass) {
 
     if(isCond(nextInstruction)) {
-        switch (getInstructionClass(nextInstruction)) {
+        switch (instructionClass) {
             case DataProcess :
                 dataProcessExecute(nextInstruction);
                 break;
@@ -305,18 +292,36 @@ void execute(struct instruction* nextInstruction) {
     }
 }
 
-struct instruction fetch() {
-    uint8_t byte0 = machineState.memory[machineState.registers[13]];
-    uint8_t byte1 = machineState.memory[machineState.registers[13]+1];
-    uint8_t byte2 = machineState.memory[machineState.registers[13]+2];
-    uint8_t byte3 = machineState.memory[machineState.registers[13]+3];
+enum InstructionClass decode(uint32_t instruction) {
+
+    if((instruction & dataProcMask) == dataProcMask) {
+        return DataProcess;
+    }
+    if((instruction & multMask) == multMask) {
+        return Multiply;
+    }
+    if((instruction & dataTransMask) == dataTransMask) {
+        return DataTransfer;
+    }else
+    {
+        return Branch;
+    }
+}
+
+uint32_t fetch() {
+    //Get instruction from memory byte by byte
+    uint8_t byte0 = machineState.memory[machineState.registers[PC]];
+    uint8_t byte1 = machineState.memory[machineState.registers[PC]+1];
+    uint8_t byte2 = machineState.memory[machineState.registers[PC]+2];
+    uint8_t byte3 = machineState.memory[machineState.registers[PC]+3];
 
     //pc + 4
     machineState.registers[13] = machineState.registers[13]+4;
 
-    struct instruction next = {byte0,byte1,byte2,byte3,((byte3 << 24) | (byte2 << 16) | (byte1 << 8) | byte0)};
+    //concat bytes into 32 bit instruction
+    uint32_t nextInstruction = ((byte3 << 24) | (byte2 << 16) | (byte1 << 8) | byte0);
 
-    return next;
+    return nextInstruction;
 }
 
 void printState() {
@@ -380,12 +385,13 @@ int main(int argc, char *argv[]) {
     binaryLoad(argv[1]);
 
     //fetch execute cycle
-    struct instruction nextInstruction = fetch();
-    while(nextInstruction.allbytes != HALT) {
+    uint32_t nextInstruction = fetch();
+    while(nextInstruction != HALT) {
 
-        execute(&nextInstruction);
+        execute(nextInstruction, decode(nextInstruction));
         nextInstruction = fetch();
     }
+
     machineState.registers[13] = machineState.registers[13]+4;
 
     //print state
