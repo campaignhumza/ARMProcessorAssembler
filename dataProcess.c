@@ -50,7 +50,7 @@ uint32_t barrelShift(struct state machineState,uint32_t nextInstruction) {
 
 static uint32_t performShift(uint8_t shiftType, uint32_t contentToShiftOn, uint32_t amountToShiftBy,bool* isCarrySet) {
 
-// >> operator is logical shift if int is unisgned and is arithmetic if int is signed.
+// >> operator is logical shift if int is unsigned and is arithmetic if int is signed.
     uint32_t operand2;
     if((shiftType & lsl) == lsl) {
         *isCarrySet = ((((contentToShiftOn << (amountToShiftBy-1)) & 0x80000000) >> 31) & 0x1) == 0x1;

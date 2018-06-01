@@ -23,7 +23,8 @@ void dataProcessExecute(struct state machineState, uint32_t nextInstruction);
 const uint32_t HALT = 0x00000000;
 
 const uint32_t dataProcMask = 0x0;
-const uint32_t multMask = 0x90;
+const uint32_t multMask = 0xFC000F0;
+const uint32_t multInstruction = 0x90;
 const uint32_t dataTransMask = 0x8000000;
 const uint32_t branchMask = 0xA000000;
 
