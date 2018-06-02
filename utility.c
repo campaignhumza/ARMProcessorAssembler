@@ -13,7 +13,7 @@ const uint8_t al = 0xE;
 
 
 bool isCond(uint32_t nextInstruction, uint32_t CSPR) {
-    uint8_t cond = ((nextInstruction >> 28) & 0xF);
+    uint8_t cond = (nextInstruction >> 28);
 
     switch(cond) {
         case eq  :

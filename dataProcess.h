@@ -11,15 +11,15 @@
 
 struct state {
     uint8_t memory[65536];
-    uint32_t registers[15];
+    uint32_t registers[17];
 };
 
 
 static uint32_t rotr32(uint32_t n, unsigned int c);
-static uint32_t performShift(uint8_t shiftType, uint32_t contentToShiftOn, uint32_t amountToShiftBy,bool* isCarrySet);
+uint32_t performShift(uint8_t shiftType, uint32_t contentToShiftOn, uint32_t amountToShiftBy,bool* isCarrySet);
 uint32_t barrelShift(struct state machineState,uint32_t nextInstruction);
 
-#define CSPR 14
+#define CSPR 16
 
 
 

@@ -31,7 +31,7 @@ uint32_t barrelShift(struct state machineState,uint32_t nextInstruction) {
         uint8_t shiftType = ((shift >> 1) & 0x3);
         uint8_t shiftOption =  (shift & 0x1) & 1;
 
-        if(shiftOption == 1) {
+        if(shiftOption == 0) {
             uint32_t integer = (shift >> 3);
             operand2 = performShift(shiftType,machineState.registers[rmRegister],integer,&c_CSPR_BitSet);
         } else {
@@ -48,34 +48,30 @@ uint32_t barrelShift(struct state machineState,uint32_t nextInstruction) {
     return operand2;
 }
 
-static uint32_t performShift(uint8_t shiftType, uint32_t contentToShiftOn, uint32_t amountToShiftBy,bool* isCarrySet) {
+uint32_t performShift(uint8_t shiftType, uint32_t contentToShiftOn, uint32_t amountToShiftBy,bool* isCarrySet) {
 
 // >> operator is logical shift if int is unsigned and is arithmetic if int is signed.
     uint32_t operand2;
     if((shiftType & lsl) == lsl) {
         *isCarrySet = ((((contentToShiftOn << (amountToShiftBy-1)) & 0x80000000) >> 31) & 0x1) == 0x1;
         operand2 = contentToShiftOn << amountToShiftBy;
-        return operand2;
+
     } else if((shiftType & lsr) == lsr) {
         *isCarrySet = ((contentToShiftOn >> (amountToShiftBy-1)) & 0x1) == 0x1;
         operand2 = contentToShiftOn >> amountToShiftBy;
-        return operand2;
     } else if((shiftType & asr) == asr) {
         *isCarrySet = ((contentToShiftOn >> (amountToShiftBy-1)) & 0x1) == 0x1;
         //cast to signed to force arithmetic shift.
         operand2 = (signed)contentToShiftOn << amountToShiftBy;
-        return operand2;
     } else {
         *isCarrySet = ((contentToShiftOn >> (amountToShiftBy-1)) & 0x1) == 0x1;
         operand2 = rotr32(contentToShiftOn,amountToShiftBy);
-        return operand2;
     }
+    return operand2;
 }
 
 static uint32_t rotr32(uint32_t n, unsigned int c) {
     const unsigned int mask = (CHAR_BIT*sizeof(n) - 1);
-
-    // assert ( (c<=mask) &&"rotate by type width or more");
     c &= mask;
     return (n>>c) | (n<<( (-c)&mask ));
 }
