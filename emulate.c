@@ -391,6 +391,7 @@ int main(int argc, char *argv[]) {
     while(nextInstruction != HALT) {
 
         execute(nextInstruction, decode(nextInstruction));
+        printState();
         nextInstruction = fetch();
     }
 

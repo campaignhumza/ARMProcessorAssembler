@@ -52,14 +52,14 @@ uint32_t performShift(uint8_t shiftType, uint32_t contentToShiftOn, uint32_t amo
 
 // >> operator is logical shift if int is unsigned and is arithmetic if int is signed.
     uint32_t operand2;
-    if((shiftType & lsl) == lsl) {
+    if(shiftType == lsl) {
         *isCarrySet = ((((contentToShiftOn << (amountToShiftBy-1)) & 0x80000000) >> 31) & 0x1) == 0x1;
         operand2 = contentToShiftOn << amountToShiftBy;
 
-    } else if((shiftType & lsr) == lsr) {
+    } else if(shiftType == lsr) {
         *isCarrySet = ((contentToShiftOn >> (amountToShiftBy-1)) & 0x1) == 0x1;
         operand2 = contentToShiftOn >> amountToShiftBy;
-    } else if((shiftType & asr) == asr) {
+    } else if(shiftType == asr) {
         *isCarrySet = ((contentToShiftOn >> (amountToShiftBy-1)) & 0x1) == 0x1;
         //cast to signed to force arithmetic shift.
         operand2 = (signed)contentToShiftOn << amountToShiftBy;
