@@ -40,13 +40,13 @@ bool isCSPR_N(uint32_t CSPR) {
 }
 
 bool isCSPR_Z(uint32_t CSPR) {
-    return (CSPR>> 30 & 1);
+    return (CSPR >> 30 & 1);
 }
 
 bool isCSPR_C(uint32_t CSPR) {
-    return (CSPR>> 29 & 1);
+    return (CSPR >> 29 & 1);
 }
 
 bool isCSPR_V(uint32_t CSPR) {
-    return (CSPR>> 28 & 1);
+    return (CSPR >> 28 & 1);
 }

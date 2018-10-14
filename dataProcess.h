@@ -15,6 +15,7 @@ struct state {
 };
 
 
+
 static uint32_t rotr32(uint32_t n, unsigned int c);
 uint32_t performShift(uint8_t shiftType, uint32_t contentToShiftOn, uint32_t amountToShiftBy,bool* isCarrySet);
 uint32_t barrelShift(struct state machineState,uint32_t nextInstruction);

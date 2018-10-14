@@ -2,6 +2,12 @@
 #include "dataProcess.h"
 
 struct state machineState;
+uint32_t nextInstructionTop;
+
+struct decodedInstruction {
+    uint32_t instruction;
+    enum InstructionClass instructionType;
+};
 
 void arithmeticLogicUnit(uint32_t nextInstruction,uint32_t operand1,uint32_t operand2) {
     //perform arithmetic
@@ -10,7 +16,7 @@ void arithmeticLogicUnit(uint32_t nextInstruction,uint32_t operand1,uint32_t ope
             uint8_t destRegisterNumber = allBytes >> 12 & 0xF;
             uint32_t * destRegister = &(machineState.registers[destRegisterNumber]);
             int32_t result;
-    bool updateCSPR = (nextInstruction & (1<<20));
+    bool updateCSPR = ((nextInstruction >> 20) & 1);
 
             if((allBytes & opCodeMask) == movOpcode) {
                 *destRegister = operand2;
@@ -23,17 +29,26 @@ void arithmeticLogicUnit(uint32_t nextInstruction,uint32_t operand1,uint32_t ope
                         machineState.registers[CSPR] |= (0x40000000);
                     }
                     machineState.registers[CSPR] |= (result & 0x80000000);
-
                 }
             } else if((allBytes & opCodeMask) == subOpcode) {
                 result = operand1 - operand2;
                 *destRegister = result;
+                if(result == 0x0 && updateCSPR) {
+                    //set Z
+                    machineState.registers[CSPR] |= (0x40000000);
+                }
                 if (updateCSPR) {
-                    if (result > (operand2)) {
+                    if (result > (operand1)) {
                         //underflow
-                        machineState.registers[CSPR] |= (0 << 30);
+                        //unset C
+                        machineState.registers[CSPR] |= (0 << 29);
                     } else {
-                        machineState.registers[CSPR] |= (1 << 30);
+                        machineState.registers[CSPR] |= (1 << 29);
+                    }
+
+                    if(result < 0) {
+                        //set N
+                        machineState.registers[CSPR] |= ((result >> 31) & 1) << 31;
                     }
                 }
             } else if((allBytes & opCodeMask) == rsbOpcode) {
@@ -66,7 +81,6 @@ void arithmeticLogicUnit(uint32_t nextInstruction,uint32_t operand1,uint32_t ope
                     }
                     machineState.registers[CSPR] |= (result & 0x80000000);
                 }
-
             } else if((allBytes & opCodeMask) == teqOpcode) {
                 result = operand1 ^ operand2;
                 if(updateCSPR) {
@@ -76,9 +90,9 @@ void arithmeticLogicUnit(uint32_t nextInstruction,uint32_t operand1,uint32_t ope
                 machineState.registers[CSPR] |= (result & 0x80000000);
 
             }
-
             } else if((allBytes & opCodeMask) == cmpOpcode) {
                 result = operand1 - operand2;
+
                 if(result == 0x0 && updateCSPR) {
                     //set Z
                     machineState.registers[CSPR] |= (0x40000000);
@@ -140,7 +154,7 @@ void multiplyExecute(struct state * machineState,uint32_t nextInstruction) {
 
 }
 
-void dataTransferExecute(uint32_t nextInstruction) {
+void dataTransferExecute(struct state *  machineState,uint32_t nextInstruction) {
 
     bool c_CSPR_BitSet = false;
     uint32_t offset = nextInstruction & 0xFFF;
@@ -150,13 +164,13 @@ void dataTransferExecute(uint32_t nextInstruction) {
         uint8_t shiftType = ((shift >> 1) & 0x3);
         uint8_t shiftOption =  (shift & 0x1) & 1;
 
-        if(shiftOption == 1) {
+        if(shiftOption == 0) {
             uint32_t integer = (shift >> 3);
-            offset = performShift(shiftType,machineState.registers[rmRegister],integer,&c_CSPR_BitSet);
+            offset = performShift(shiftType,machineState->registers[rmRegister],integer,&c_CSPR_BitSet);
         } else {
             uint32_t rsRegister = (shift >> 4);
-            uint8_t bottomByteOfrsRegister = (machineState.registers[rsRegister]);
-            offset = performShift(shiftType,machineState.registers[rmRegister],bottomByteOfrsRegister,&c_CSPR_BitSet);
+            uint8_t bottomByteOfrsRegister = (machineState->registers[rsRegister]);
+            offset = performShift(shiftType,machineState->registers[rmRegister],bottomByteOfrsRegister,&c_CSPR_BitSet);
         }
     }
 
@@ -176,90 +190,120 @@ void dataTransferExecute(uint32_t nextInstruction) {
     if(PisSet) {
         if(LisSet) {
             if(UisSet) {
-                byte0 = machineState.memory[machineState.registers[RnRegister] + offset];
-                byte1 = machineState.memory[machineState.registers[RnRegister] + offset + 1];
-                byte2 = machineState.memory[machineState.registers[RnRegister] + offset + 2];
-                byte3 = machineState.memory[machineState.registers[RnRegister] + offset + 3];
+                byte0 = machineState->memory[machineState->registers[RnRegister] + offset];
+                byte1 = machineState->memory[machineState->registers[RnRegister] + offset + 1];
+                byte2 = machineState->memory[machineState->registers[RnRegister] + offset + 2];
+                byte3 = machineState->memory[machineState->registers[RnRegister] + offset + 3];
                 word = ((byte3 << 24) | (byte2 << 16) | (byte1 << 8) | byte0);
-                machineState.registers[RdRegister] =  word;
+                machineState->registers[RdRegister] =  word;
             } else {
-                byte0 = machineState.memory[machineState.registers[RnRegister] - offset];
-                byte1 = machineState.memory[machineState.registers[RnRegister] - (offset + 1)];
-                byte2 = machineState.memory[machineState.registers[RnRegister] - (offset + 2)];
-                byte3 = machineState.memory[machineState.registers[RnRegister] - (offset + 3)];
+                byte0 = machineState->memory[machineState->registers[RnRegister] - offset];
+                byte1 = machineState->memory[machineState->registers[RnRegister] - (offset - 1)];
+                byte2 = machineState->memory[machineState->registers[RnRegister] - (offset - 2)];
+                byte3 = machineState->memory[machineState->registers[RnRegister] - (offset - 3)];
                 word = ((byte3 << 24) | (byte2 << 16) | (byte1 << 8) | byte0);
-                machineState.registers[RdRegister] = word;
+                machineState->registers[RdRegister] = word;
             }
         } else {
             if(UisSet) {
-                byte0 = machineState.registers[RdRegister];
-                byte1 = machineState.registers[RdRegister] >> 8;
-                byte2 = machineState.registers[RdRegister] >> 16;
-                byte3 = machineState.registers[RdRegister] >> 24;
-                machineState.memory[machineState.registers[RnRegister] + offset] =  byte0;
-                machineState.memory[machineState.registers[RnRegister] + offset + 1] =  byte1;
-                machineState.memory[machineState.registers[RnRegister] + offset + 2] =  byte2;
-                machineState.memory[machineState.registers[RnRegister] + offset + 3] =  byte3;
+                byte0 = machineState->registers[RdRegister];
+                byte1 = machineState->registers[RdRegister] >> 8;
+                byte2 = machineState->registers[RdRegister] >> 16;
+                byte3 = machineState->registers[RdRegister] >> 24;
+                machineState->memory[machineState->registers[RnRegister] + offset] =  byte0;
+                machineState->memory[machineState->registers[RnRegister] + offset + 1] =  byte1;
+                machineState->memory[machineState->registers[RnRegister] + offset + 2] =  byte2;
+                machineState->memory[machineState->registers[RnRegister] + offset + 3] =  byte3;
             } else {
-                byte0 = machineState.registers[RdRegister];
-                byte1 = machineState.registers[RdRegister] >> 8;
-                byte2 = machineState.registers[RdRegister] >> 16;
-                byte3 = machineState.registers[RdRegister] >> 24;
-                machineState.memory[machineState.registers[RnRegister] - offset] =  byte0;
-                machineState.memory[machineState.registers[RnRegister] - (offset + 1)] =  byte1;
-                machineState.memory[machineState.registers[RnRegister] - (offset + 2)] =  byte2;
-                machineState.memory[machineState.registers[RnRegister] - (offset + 3)] =  byte3;
+                byte0 = machineState->registers[RdRegister];
+                byte1 = machineState->registers[RdRegister] >> 8;
+                byte2 = machineState->registers[RdRegister] >> 16;
+                byte3 = machineState->registers[RdRegister] >> 24;
+                machineState->memory[machineState->registers[RnRegister] - offset] =  byte0;
+                machineState->memory[machineState->registers[RnRegister] - (offset + 1)] =  byte1;
+                machineState->memory[machineState->registers[RnRegister] - (offset + 2)] =  byte2;
+                machineState->memory[machineState->registers[RnRegister] - (offset + 3)] =  byte3;
             }
         }
     } else {
         if(LisSet) {
             if(UisSet) {
-                byte0 = machineState.memory[machineState.registers[RnRegister]];
-                byte1 = machineState.memory[machineState.registers[RnRegister] + 1];
-                byte2 = machineState.memory[machineState.registers[RnRegister] + 2];
-                byte3 = machineState.memory[machineState.registers[RnRegister] + 3];
+                byte0 = machineState->memory[machineState->registers[RnRegister]];
+                byte1 = machineState->memory[machineState->registers[RnRegister] + 1];
+                byte2 = machineState->memory[machineState->registers[RnRegister] + 2];
+                byte3 = machineState->memory[machineState->registers[RnRegister] + 3];
                 word = ((byte3 << 24) | (byte2 << 16) | (byte1 << 8) | byte0);
-                machineState.registers[RdRegister] =  word;
-                machineState.registers[RnRegister] += offset;
+                machineState->registers[RdRegister] =  word;
+                machineState->registers[RnRegister] += offset;
             } else {
-                byte0 = machineState.memory[machineState.registers[RnRegister]];
-                byte1 = machineState.memory[machineState.registers[RnRegister] + 1];
-                byte2 = machineState.memory[machineState.registers[RnRegister] + 2];
-                byte3 = machineState.memory[machineState.registers[RnRegister] + 3];
+                byte0 = machineState->memory[machineState->registers[RnRegister]];
+                byte1 = machineState->memory[machineState->registers[RnRegister] + 1];
+                byte2 = machineState->memory[machineState->registers[RnRegister] + 2];
+                byte3 = machineState->memory[machineState->registers[RnRegister] + 3];
                 word = ((byte3 << 24) | (byte2 << 16) | (byte1 << 8) | byte0);
-                machineState.registers[RdRegister] =  word;
-                machineState.registers[RnRegister] -= offset;
+                machineState->registers[RdRegister] =  word;
+                machineState->registers[RnRegister] -= offset;
             }
         } else {
             if(UisSet) {
-                byte0 = machineState.registers[RdRegister];
-                byte1 = machineState.registers[RdRegister] >> 8 ;
-                byte2 = machineState.registers[RdRegister] >> 16;
-                byte3 = machineState.registers[RdRegister] >> 24;
-                machineState.memory[machineState.registers[RnRegister]] =  byte0;
-                machineState.memory[machineState.registers[RnRegister] + 1] =  byte1;
-                machineState.memory[machineState.registers[RnRegister] + 2] =  byte2;
-                machineState.memory[machineState.registers[RnRegister]+ 3] =  byte3;
-                machineState.registers[RnRegister] += offset;
+                byte0 = machineState->registers[RdRegister];
+                byte1 = machineState->registers[RdRegister] >> 8 ;
+                byte2 = machineState->registers[RdRegister] >> 16;
+                byte3 = machineState->registers[RdRegister] >> 24;
+                machineState->memory[machineState->registers[RnRegister]] =  byte0;
+                machineState->memory[machineState->registers[RnRegister] + 1] =  byte1;
+                machineState->memory[machineState->registers[RnRegister] + 2] =  byte2;
+                machineState->memory[machineState->registers[RnRegister]+ 3] =  byte3;
+                machineState->registers[RnRegister] += offset;
             } else {
-                byte0 = machineState.registers[RdRegister];
-                byte1 = machineState.registers[RdRegister] >> 8 ;
-                byte2 = machineState.registers[RdRegister] >> 16;
-                byte3 = machineState.registers[RdRegister] >> 24;
-                machineState.memory[machineState.registers[RnRegister]] =  byte0;
-                machineState.memory[machineState.registers[RnRegister] + 1] =  byte1;
-                machineState.memory[machineState.registers[RnRegister] + 2] =  byte2;
-                machineState.memory[machineState.registers[RnRegister]+ 3] =  byte3;
-                machineState.registers[RnRegister] -= offset;
+                byte0 = machineState->registers[RdRegister];
+                byte1 = machineState->registers[RdRegister] >> 8 ;
+                byte2 = machineState->registers[RdRegister] >> 16;
+                byte3 = machineState->registers[RdRegister] >> 24;
+                machineState->memory[machineState->registers[RnRegister]] =  byte0;
+                machineState->memory[machineState->registers[RnRegister] + 1] =  byte1;
+                machineState->memory[machineState->registers[RnRegister] + 2] =  byte2;
+                machineState->memory[machineState->registers[RnRegister]+ 3] =  byte3;
+                machineState->registers[RnRegister] -= offset;
             }
         }
     }
 }
 
-void branchExecute(uint32_t nextInstruction) {
-    int32_t signedOffSet = ((nextInstruction & branchOffSetMask)+1) << 2;
+uint32_t fetch() {
+    //Get instruction from memory byte by byte
+    uint8_t byte0 = machineState.memory[machineState.registers[PC]];
+    uint8_t byte1 = machineState.memory[machineState.registers[PC]+1];
+    uint8_t byte2 = machineState.memory[machineState.registers[PC]+2];
+    uint8_t byte3 = machineState.memory[machineState.registers[PC]+3];
 
-    machineState.registers[PC] += (signedOffSet);
+
+    //pc + 4
+    machineState.registers[PC] = machineState.registers[PC]+4;
+
+    //concat bytes into 32 bit instruction
+    uint32_t nextInstruction = ((byte3 << 24) | (byte2 << 16) | (byte1 << 8) | byte0);
+
+    return nextInstruction;
+}
+
+void branchExecute(uint32_t nextInstruction,struct state * machineState) {
+    uint32_t signedOffSet = (nextInstruction & branchOffSetMask);
+
+    if((signedOffSet >> 23) == 1) {
+        signedOffSet = signedOffSet << 2;
+        signedOffSet |= 0xFC000000;
+        signedOffSet = (~(signedOffSet) & 0xFFFFFF)  + 1;
+        //signedOffSet |= 0x7FFFFF;
+        //signedOffSet += 1;
+        //signedOffSet = signedOffSet << 2;
+        machineState->registers[PC] -= (signedOffSet+4);
+    } else {
+        signedOffSet = (signedOffSet) << 2;
+        machineState->registers[PC] += (signedOffSet+4);
+    }
+
+   //nextInstructionTop = fetch();
 }
 
 void dataProcessExecute(struct state machineState, uint32_t nextInstruction) {
@@ -281,17 +325,16 @@ void execute(uint32_t nextInstruction, enum InstructionClass instructionClass) {
                 multiplyExecute(&machineState,nextInstruction);
                 break;
             case DataTransfer :
-                dataTransferExecute(nextInstruction);
+                dataTransferExecute(&machineState,nextInstruction);
                 break;
             case Branch :
-                branchExecute(nextInstruction);
+                branchExecute(nextInstruction,&machineState);
                 break;
         }
     }
 }
 
 enum InstructionClass decode(uint32_t instruction) {
-
     if((instruction & branchMask) == branchInstruction) {
         return Branch;
     }
@@ -305,36 +348,21 @@ enum InstructionClass decode(uint32_t instruction) {
     }
 }
 
-uint32_t fetch() {
-    //Get instruction from memory byte by byte
-    uint8_t byte0 = machineState.memory[machineState.registers[PC]];
-    uint8_t byte1 = machineState.memory[machineState.registers[PC]+1];
-    uint8_t byte2 = machineState.memory[machineState.registers[PC]+2];
-    uint8_t byte3 = machineState.memory[machineState.registers[PC]+3];
 
-
-    //pc + 4
-    machineState.registers[PC] = machineState.registers[PC]+4;
-
-    //concat bytes into 32 bit instruction
-    uint32_t nextInstruction = ((byte3 << 24) | (byte2 << 16) | (byte1 << 8) | byte0);
-
-    return nextInstruction;
-}
 
 void printState() {
     printf("Registers:\n");
     for(int i = 0; i <=16; i++) {
         if(i < 13) {
-                printf("$%-3d:%10d (0x%08x)\n",i,machineState.registers[i],machineState.registers[i]);
+                printf("$%-3d:%11d (0x%08x)\n",i,machineState.registers[i],machineState.registers[i]);
 
 
         } else {
             if(i >= 15) {
                 if (i == 15) {
-                    printf("PC  :%10d (0x%08x)\n", machineState.registers[i], machineState.registers[i]);
+                    printf("PC  :%11d (0x%08x)\n", machineState.registers[i], machineState.registers[i]);
                 } else {
-                    printf("CSPR:%10d (0x%08x)\n", machineState.registers[i], machineState.registers[i]);
+                    printf("CSPR:%11d (0x%08x)\n", machineState.registers[i], machineState.registers[i]);
                 }
             }
         }
@@ -385,15 +413,15 @@ int main(int argc, char *argv[]) {
     //binary Load
     binaryLoad(argv[1]);
 
-    struct state stateVar = machineState;
+    //struct state stateVar = machineState;
     //fetch execute cycle
-    uint32_t nextInstruction = fetch();
-    while(nextInstruction != HALT) {
+    nextInstructionTop = 0x1;
+    while(nextInstructionTop != HALT) {
+        nextInstructionTop = fetch();
+        execute(nextInstructionTop, decode(nextInstructionTop));
+        //printState();
 
-        execute(nextInstruction, decode(nextInstruction));
-        printState();
-        nextInstruction = fetch();
-    }
+    } // 1110 01 0 1 1 00 0 0000 0001 000000000011
 
     machineState.registers[PC] = machineState.registers[PC]+4;
 
