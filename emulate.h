@@ -13,12 +13,26 @@
 #include "dataProcess.h"
 #define PC 15
 
+
+typedef struct {
+    uint8_t memory[65536];
+    uint32_t registers[17];
+} MachineState;
+
+
+
+static uint32_t rotr32(uint32_t n, unsigned int c);
+uint32_t performShift(uint8_t shiftType, uint32_t contentToShiftOn, uint32_t amountToShiftBy,bool* isCarrySet);
+uint32_t barrelShift(uint32_t nextInstruction);
+
+#define CSPR 16
+
 enum InstructionClass{DataProcess, Multiply, DataTransfer, Branch};
 
 enum ShiftType{LSL, LSR, ASR, ROR};
 
 void arithmeticLogicUnit(uint32_t nextInstruction,uint32_t operand1,uint32_t operand2);
-void dataProcessExecute(struct state machineState, uint32_t nextInstruction);
+void dataProcessExecute(uint32_t nextInstruction);
 
 const uint32_t HALT = 0x00000000;
 

@@ -1,14 +1,14 @@
 //
 // Created by el djebena on 01/06/2018.
 //
-#include "dataProcess.h"
+//#include "dataProcess.h"
 
-const uint8_t lsl = 0x0;
+/*const uint8_t lsl = 0x0;
 const uint8_t lsr = 0x1;
 const uint8_t asr = 0x2;
 const uint8_t ror = 0x3;
 
-uint32_t barrelShift(struct state machineState,uint32_t nextInstruction) {
+uint32_t barrelShift(uint32_t nextInstruction) {
 
     uint32_t allBytes = nextInstruction;
     uint32_t operand2 = allBytes & 0xFFF;
@@ -74,4 +74,4 @@ static uint32_t rotr32(uint32_t n, unsigned int c) {
     const unsigned int mask = (CHAR_BIT*sizeof(n) - 1);
     c &= mask;
     return (n>>c) | (n<<( (-c)&mask ));
-}
+}*/
