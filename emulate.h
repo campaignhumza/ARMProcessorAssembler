@@ -11,6 +11,9 @@
 #include <limits.h>
 #include "utility.h"
 #include "dataProcess.h"
+#include "multiply.h"
+#include "dataTransfer.h"
+#include "branch.h"
 #define PC 15
 
 
@@ -36,6 +39,14 @@ typedef struct {
 extern MachineState machineState;
 extern DecodedInstruction decodedInstruction;
 extern FetchedInstruction fetchedInstruction;
+
+void binaryLoad(char *binPath);
+void printState();
+void execute(DecodedInstruction decodedInstruction);
+void decode(FetchedInstruction nextInstruction);
+uint32_t fetch();
+int emulate(char *binPath);
+
 
 
 #define CSPR 16
