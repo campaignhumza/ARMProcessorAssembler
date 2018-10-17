@@ -14,49 +14,34 @@
 #define PC 15
 
 
+enum InstructionClass{DataProcess, Multiply, DataTransfer, Branch};
+enum ShiftType{LSL, LSR, ASR, ROR};
+
 typedef struct {
     uint8_t memory[65536];
     uint32_t registers[17];
 } MachineState;
 
+typedef struct {
+    uint32_t instruction;
+    bool isvalid;
+} FetchedInstruction;
 
+typedef struct {
+    uint32_t instruction;
+    enum InstructionClass instructionType;
+    bool hasValue;
+} DecodedInstruction;
 
-static uint32_t rotr32(uint32_t n, unsigned int c);
-uint32_t performShift(uint8_t shiftType, uint32_t contentToShiftOn, uint32_t amountToShiftBy,bool* isCarrySet);
-uint32_t barrelShift(uint32_t nextInstruction);
+extern MachineState machineState;
+extern DecodedInstruction decodedInstruction;
+extern FetchedInstruction fetchedInstruction;
+
 
 #define CSPR 16
 
-enum InstructionClass{DataProcess, Multiply, DataTransfer, Branch};
 
-enum ShiftType{LSL, LSR, ASR, ROR};
 
-void arithmeticLogicUnit(uint32_t nextInstruction,uint32_t operand1,uint32_t operand2);
-void dataProcessExecute(uint32_t nextInstruction);
 
-const uint32_t HALT = 0x00000000;
 
-const uint32_t dataProcMask = 0x0;
-const uint32_t multMask = 0xFC000F0;
-const uint32_t multInstruction = 0x90;
-const uint32_t dataTransMask = 0xC600000;
-const uint32_t dataTransInstruction = 0x4000000;
-const uint32_t branchMask = 0xF000000;
-const uint32_t branchInstruction = 0xA000000;
-
-const uint32_t opCodeMask = 0x1E00000;
-const uint32_t andOpcode = 0x0;
-const uint32_t eorOpcode = 0x200000;
-const uint32_t subOpcode = 0x400000;
-const uint32_t rsbOpcode = 0x600000;
-const uint32_t addOpcode = 0x800000;
-const uint32_t tstOpcode = 0x1000000;
-const uint32_t teqOpcode = 0x1200000;
-const uint32_t cmpOpcode = 0x1400000;
-const uint32_t orrOpcode = 0x1800000;
-const uint32_t movOpcode = 0x1A00000;
-
-const int32_t branchOffSetMask = 0xFFFFFF;
-
-//struct instruction fetchNext(struct state* machineState);
 #endif //EMULATOR_EMULATE_H

@@ -12,4 +12,5 @@ bool isCSPR_Z(uint32_t CSPR);
 bool isCSPR_C(uint32_t CSPR);
 bool isCSPR_V(uint32_t CSPR);
 bool isCond(uint32_t nextInstruction, uint32_t CSPR);
+uint32_t setBit(uint32_t number, int bitPos, int bitNewValue);
 #endif //EMULATOR_UTILITY_H

@@ -11,6 +11,17 @@ const uint8_t gt = 0xC;
 const uint8_t le = 0xD;
 const uint8_t al = 0xE;
 
+uint32_t setBit(uint32_t number, int bitPos, int bitNewValue) {
+    uint32_t bin = number;
+    if (bitNewValue) {
+        bin |= 1 << bitPos;
+        return bin;
+    } else {
+        bin &= ~(1 << bitPos);
+        return bin;
+    }
+
+}
 
 bool isCond(uint32_t nextInstruction, uint32_t CSPR) {
     uint8_t cond = (nextInstruction >> 28);
